@@ -15,8 +15,9 @@ the loopback only. The lab is on in that container; the control API refuses to s
 
 The delivery scripts, the control API, the landing page and lab in 14 languages, the browser tests, the smoke test, the mutation
 check, the Terraform module, the Helm chart, the two workflows and the documentation are complete and verified locally
-(section 8). Nothing has run on GitHub yet: the CI workflow and the manual deploy workflow are written and `actionlint` is clean,
-which is all that is proven about them until the first push.
+(section 8). The CI workflow ran on GitHub on 2026-11-05: the first run was red on one browser test (see section 7), the second
+was green in all seven jobs (API, scripts with the alert rules, Terraform and Helm, mutation check, stack, browser, security). The manual
+deploy workflow is written and `actionlint` is clean; it has never run, and nothing has been deployed to a host.
 
 ## 3. What the owner does now
 
