@@ -1,0 +1,5 @@
+{
+  "name": "v4-orders-status",
+  "version": "1.3.0",
+  "db": { "port": 5432 }
+}

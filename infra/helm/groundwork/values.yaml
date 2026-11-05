@@ -1,0 +1,31 @@
+# Image: build the sample service (app/) into an image and push it; the chart does not guess where.
+image:
+  repository: registry.example.test/groundwork/app
+  tag: "1.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+service:
+  port: 80
+
+# Port the container listens on.
+containerPort: 4101
+
+# Where the service believes the database is (see app/server.mjs). Part of what makes a release healthy.
+database:
+  host: db
+  port: 5432
+
+resources:
+  requests: { cpu: 50m, memory: 64Mi }
+  limits: { cpu: 250m, memory: 128Mi }
+
+# Pods may be taken away one at a time by a node drain; never all.
+podDisruptionBudget:
+  minAvailable: 1
+
+# Ingress to the pods is closed except from the namespace that holds the ingress controller.
+networkPolicy:
+  enabled: true
+  ingressNamespace: ingress-nginx

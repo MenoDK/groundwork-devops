@@ -1,0 +1,7 @@
+[Unit]
+Description=Back up the database and rehearse the restore
+
+[Service]
+Type=oneshot
+ExecStart=/opt/groundwork/ops/backup.sh take
+ExecStartPost=/bin/sh -c "/opt/groundwork/ops/backup.sh drill \"$(ls -1t /srv/groundwork/backups/db-*.dump | head -n 1)\""

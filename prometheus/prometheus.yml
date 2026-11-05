@@ -1,0 +1,20 @@
+# Scrapes two things through the edge, the way anything outside the host would reach them.
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+rule_files:
+  - /etc/prometheus/rules.yml
+
+scrape_configs:
+  # The sample service. `up` is 0 whenever the edge cannot get an answer from it: a dead process, a crashed release, no release.
+  - job_name: app
+    metrics_path: /app/metrics
+    static_configs:
+      - targets: ["host:8080"]
+
+  # What the delivery machinery knows about itself: deploys by outcome, backups, drills, drift.
+  - job_name: control
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host:8080"]

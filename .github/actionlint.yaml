@@ -1,0 +1,6 @@
+# actionlint runs shellcheck on every `run:` block. SC2029 ("this expands on the client side") is informational and, in
+# deploy.yml, exactly what is wanted: the remote path is built on the runner and the server receives the final value.
+paths:
+  .github/workflows/deploy.yml:
+    ignore:
+      - 'shellcheck reported issue in this script: SC2029:.+'

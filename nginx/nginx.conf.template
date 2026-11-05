@@ -1,0 +1,55 @@
+# Rendered by ops/render-nginx.sh into run/nginx.conf. The three include files in run/ are the only parts a deploy changes:
+#   upstream-live.conf     which slot serves /app/
+#   release-snippet.conf   the headers the release itself asks for (checked by `nginx -t` before it is ever loaded)
+worker_processes 1;
+error_log stderr warn;
+pid __RUN__/nginx.pid;
+
+events { worker_connections 256; }
+
+http {
+  access_log off;
+  server_tokens off;
+  client_body_temp_path __RUN__/tmp/body;
+  proxy_temp_path       __RUN__/tmp/proxy;
+  fastcgi_temp_path     __RUN__/tmp/fastcgi;
+  uwsgi_temp_path       __RUN__/tmp/uwsgi;
+  scgi_temp_path        __RUN__/tmp/scgi;
+
+  # One address may not use the machine up. Generous for a person, a wall for a loop.
+  limit_req_zone $binary_remote_addr zone=per_ip:1m rate=30r/s;
+  limit_req_status 429;
+
+  upstream app_live { include __RUN__/upstream-live.conf; }
+  upstream control  { server 127.0.0.1:__CONTROL_PORT__; }
+
+  server {
+    listen __EDGE_PORT__;
+    server_name _;
+
+    client_max_body_size 64k;
+    limit_req zone=per_ip burst=60 nodelay;
+
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "no-referrer" always;
+
+    # The sample service. Which release answers is decided by the deploy, not by this file.
+    location /app/ {
+      proxy_pass http://app_live/;
+      proxy_set_header Host $host;
+      proxy_connect_timeout 2s;
+      proxy_read_timeout 10s;
+      add_header X-Content-Type-Options "nosniff" always;
+      include __RUN__/release-snippet.conf;
+    }
+
+    # The landing page, the lab and the API.
+    location / {
+      proxy_pass http://control;
+      # $http_host keeps the port: the API compares it with the Origin header of a browser request.
+      proxy_set_header Host $http_host;
+      proxy_set_header X-Forwarded-For $remote_addr;
+      proxy_read_timeout 120s;
+    }
+  }
+}

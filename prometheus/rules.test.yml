@@ -1,0 +1,112 @@
+# Run with: promtool test rules prometheus/rules.test.yml   (make test-rules). No server, no waiting: the series are written here.
+rule_files:
+  - rules.yml
+evaluation_interval: 5s
+
+tests:
+  - name: a service that stays down for longer than `for` pages
+    interval: 5s
+    input_series:
+      - series: 'up{job="app"}'
+        values: "1 1 0 0 0 0 0 0 0 0"
+    alert_rule_test:
+      - eval_time: 10s
+        alertname: AppDown
+        exp_alerts: []
+      - eval_time: 40s
+        alertname: AppDown
+        exp_alerts:
+          - exp_labels: { severity: page, job: app }
+            exp_annotations: { summary: "The sample service is not answering through the edge" }
+
+  - name: a blip shorter than `for` never pages
+    interval: 5s
+    input_series:
+      - series: 'up{job="app"}'
+        values: "1 1 0 1 1 1 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 45s
+        alertname: AppDown
+        exp_alerts: []
+
+  - name: one refused deploy is the gate working; three is a pattern
+    interval: 1m
+    input_series:
+      - series: 'gw_deploys_total{result="refused"}'
+        values: "0 1 1 1 1 1 1 1 1 1 1 1"
+      - series: 'gw_deploys_total{result="refused",job="x"}'
+        values: "0 0 0 0 0 0 0 0 0 0 0 0"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: DeploysKeepBeingRefused
+        exp_alerts: []
+
+  - name: three refusals in ten minutes alert
+    interval: 1m
+    input_series:
+      - series: 'gw_deploys_total{result="refused"}'
+        values: "0 1 2 3 3 3 3 3 3 3 3 3"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: DeploysKeepBeingRefused
+        exp_alerts:
+          - exp_labels: { severity: warn, result: refused }
+            exp_annotations: { summary: "Three or more deploys were refused in ten minutes" }
+
+  - name: a backup older than 26 hours alerts, a fresh one does not
+    # One sample a minute: with sparser samples the series is only visible for the 5 minutes after each one (the lookback
+    # window), and an alert with `for: 1m` would never get to fire.
+    interval: 1m
+    input_series:
+      # taken at t=0 and never again
+      - series: "gw_last_backup_timestamp_seconds"
+        values: "0x1800"
+      # taken every minute of this test (its timestamp keeps up with the clock)
+      - series: 'gw_last_backup_timestamp_seconds{host="fresh"}'
+        values: "0+60x1800"
+    alert_rule_test:
+      - eval_time: 20h
+        alertname: BackupStale
+        exp_alerts: []
+      - eval_time: 29h
+        alertname: BackupStale
+        exp_alerts:
+          - exp_labels: { severity: warn }
+            exp_annotations: { summary: "The newest backup is older than 26 hours" }
+
+  - name: a failed drill pages at once, a good one is silent
+    interval: 1m
+    input_series:
+      - series: "gw_last_drill_ok"
+        values: "1 1 0 0"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: RestoreDrillFailing
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: RestoreDrillFailing
+        exp_alerts:
+          - exp_labels: { severity: page }
+            exp_annotations: { summary: "The last restore drill failed" }
+
+  - name: drift that is fixed within `for` does not alert
+    interval: 5s
+    input_series:
+      - series: "gw_config_drift_files"
+        values: "0 2 2 0 0 0 0 0"
+    alert_rule_test:
+      - eval_time: 35s
+        alertname: ConfigurationDrift
+        exp_alerts: []
+
+  - name: drift that stays alerts
+    interval: 5s
+    input_series:
+      - series: "gw_config_drift_files"
+        values: "0 2 2 2 2 2 2 2 2 2"
+    alert_rule_test:
+      - eval_time: 45s
+        alertname: ConfigurationDrift
+        exp_alerts:
+          - exp_labels: { severity: warn }
+            exp_annotations: { summary: "The server's configuration differs from the repository" }

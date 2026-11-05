@@ -1,0 +1,45 @@
+groups:
+  - name: groundwork
+    rules:
+      # `for` is the difference between a page and noise: a blip shorter than this never fires.
+      - alert: AppDown
+        expr: up{job="app"} == 0
+        for: 15s
+        labels:
+          severity: page
+        annotations:
+          summary: "The sample service is not answering through the edge"
+
+      # One refused release is the gates working. Three in ten minutes is somebody pushing the same thing at them.
+      - alert: DeploysKeepBeingRefused
+        expr: increase(gw_deploys_total{result="refused"}[10m]) >= 3
+        labels:
+          severity: warn
+        annotations:
+          summary: "Three or more deploys were refused in ten minutes"
+
+      # A backup nobody took lately is not a backup. 26 hours: a nightly job and some slack.
+      - alert: BackupStale
+        expr: time() - gw_last_backup_timestamp_seconds > 93600
+        for: 1m
+        labels:
+          severity: warn
+        annotations:
+          summary: "The newest backup is older than 26 hours"
+
+      # The drill is the part of a backup that counts: 0 means the last restore did not hold.
+      - alert: RestoreDrillFailing
+        expr: gw_last_drill_ok == 0
+        labels:
+          severity: page
+        annotations:
+          summary: "The last restore drill failed"
+
+      # The repository says one thing and the server does another.
+      - alert: ConfigurationDrift
+        expr: gw_config_drift_files > 0
+        for: 30s
+        labels:
+          severity: warn
+        annotations:
+          summary: "The server's configuration differs from the repository"

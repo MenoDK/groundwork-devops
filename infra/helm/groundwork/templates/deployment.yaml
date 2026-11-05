@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "groundwork.name" . }}
+  labels:
+    {{- include "groundwork.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  # The Kubernetes version of the health gate: a new pod must pass its readiness probe before an old one is removed,
+  # and no old pod is removed before that. A release that cannot reach its database never takes traffic.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  progressDeadlineSeconds: 120
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      {{- include "groundwork.selector" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "groundwork.labels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: PORT
+              value: {{ .Values.containerPort | quote }}
+            - name: GW_BIND
+              value: "0.0.0.0"
+            - name: GW_DB_HOST
+              value: {{ .Values.database.host | quote }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.containerPort }}
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /version, port: http }
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]

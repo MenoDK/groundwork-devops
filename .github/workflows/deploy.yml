@@ -1,0 +1,83 @@
+name: deploy
+
+# WRITTEN, NEVER RUN AGAINST A REAL HOST. It shows how the same scripts the lab drives would be called over SSH: build the
+# package in CI, copy it to the server, and let `ops/deploy.sh` there run every gate. A refusal exits non-zero and fails the
+# job; the release that was serving keeps serving.
+#
+# It does nothing unless the repository variable DEPLOY_ENABLED is "true", and it needs a protected environment named
+# "production" (required reviewers) with these set on it:
+#   variables  DEPLOY_HOST  DEPLOY_USER  DEPLOY_KNOWN_HOSTS   (the server's host key line: the connection is refused if it differs)
+#   secrets    DEPLOY_SSH_KEY                                  (a key that may only run deploy.sh)
+
+on:
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: Which sample release to build and ship
+        type: choice
+        options: [v1, v2]
+        default: v2
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build the package, copy it, let the server decide
+    if: vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the package (files + MANIFEST.sha256)
+        env:
+          GW_OPT: ${{ github.workspace }}
+          GW_ROOT: ${{ runner.temp }}/gw
+          VARIANT: ${{ inputs.variant }}
+        run: |
+          mkdir -p "$GW_ROOT"
+          ops/build-release.sh "$VARIANT" "$RUNNER_TEMP/package"
+          wc -l "$RUNNER_TEMP/package/MANIFEST.sha256"
+
+      - name: Trust the server's host key, and only that one
+        env:
+          DEPLOY_KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Copy the package, then run the gates on the server
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+        run: |
+          ssh_opts=(-i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$HOME/.ssh/known_hosts" -o BatchMode=yes)
+          incoming="/opt/groundwork/incoming/${GITHUB_SHA}-${GITHUB_RUN_ID}"
+          ssh "${ssh_opts[@]}" "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$incoming'"
+          rsync -a --delete -e "ssh ${ssh_opts[*]}" "$RUNNER_TEMP/package/" "$DEPLOY_USER@$DEPLOY_HOST:$incoming/"
+          # The server verifies its own copy of the package (ADR 0001); the gates decide. Their last line is the answer.
+          set +e
+          ssh "${ssh_opts[@]}" "$DEPLOY_USER@$DEPLOY_HOST" "/opt/groundwork/ops/deploy.sh '$incoming'" | tee "$RUNNER_TEMP/deploy.out"
+          code=${PIPESTATUS[0]}
+          set -e
+          {
+            echo "### Deploy result"
+            echo
+            echo '```'
+            grep '^RESULT ' "$RUNNER_TEMP/deploy.out" | tail -n 1 || echo "no RESULT line (exit $code)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$code"
+
+      - name: Forget the key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

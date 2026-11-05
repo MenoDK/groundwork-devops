@@ -1,0 +1,5 @@
+# Stand-in for /etc/ssh/sshd_config.
+Port 22
+PermitRootLogin yes
+PasswordAuthentication yes
+X11Forwarding no

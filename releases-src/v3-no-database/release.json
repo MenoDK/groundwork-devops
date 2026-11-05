@@ -1,0 +1,5 @@
+{
+  "name": "v3-no-database",
+  "version": "1.2.0",
+  "db": { "port": 5999 }
+}

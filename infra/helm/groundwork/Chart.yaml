@@ -1,0 +1,6 @@
+apiVersion: v2
+name: groundwork
+description: The sample service from this repository on Kubernetes. A rolling update that cannot lose capacity, gated by the same health check the VPS deploy uses.
+type: application
+version: 0.1.0
+appVersion: "1.1.0"
