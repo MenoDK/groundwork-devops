@@ -52,6 +52,10 @@ None.
   helper that ran `nginx -s stop` hung the suite; the mutation script contaminated its own later runs through a shared
   directory; and Prometheus could not scrape the control API because its Host check answered 403 to the service name
   `host`. The smoke test now fails if any scrape target is down.
+- The first CI run was red on one browser test, and the cause was in the Makefile, not the page: `make e2e` did not ship a first
+  release, so on a fresh stack `/app/version` answered 502 and the lab page logged it. Locally the stack already had a release,
+  so it passed. Reproduced on a stack made with `make reset` (same output as CI), fixed by running `scripts/first-release.sh`
+  in `make e2e` and `make screenshots`. Run the suite from `make reset` before trusting it.
 - `scripts/first-release.sh` was not executable when first written, which would have broken `make up` on a fresh clone. Git
   must record mode 755 for it (`git ls-files -s scripts/first-release.sh`).
 - The lab's "damaged copy" of a dump was never rotated, so copies piled up beside dumps that had been deleted. `rotate` now

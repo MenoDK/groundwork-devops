@@ -59,6 +59,7 @@ smoke: ## 34 checks against the running stack, including an alert firing and cle
 e2e: env ## browser tests (Playwright + axe) against the running stack
 	@mkdir -p docs/img  # Docker would create a missing bind-mount source as root, and then you could not write to docs/
 	$(COMPOSE) up --build --wait -d
+	@scripts/first-release.sh http://localhost:$${GW_PORT:-8100}  # with nothing live the edge answers 502, and the lab page logs it
 	$(COMPOSE) --profile e2e run --rm $(E2E_USER) e2e
 
 transcripts: ## re-record the guided tour on the page from the running stack
@@ -70,4 +71,5 @@ sabotage: env ## break each gate on purpose and confirm the test that guards it 
 screenshots: env ## re-take the README screenshots (docs/img) from the running stack
 	@mkdir -p docs/img
 	$(COMPOSE) up --build --wait -d
+	@scripts/first-release.sh http://localhost:$${GW_PORT:-8100}
 	$(COMPOSE) --profile e2e run --rm $(E2E_USER) -e SHOTS=1 e2e bash -lc "npm ci --no-audit --no-fund && npx playwright test shots"
